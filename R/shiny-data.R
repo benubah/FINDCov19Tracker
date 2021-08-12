@@ -7,10 +7,10 @@
 #' @importFrom gert git_status
 #' @importFrom tibble add_column
 create_shiny_data <- function() {
-
+  
   process_jhu_data()
   process_test_data()
-
+  
   # in case some countries have negative data, we exit early
   git_mod <- gert::git_status()
   git_mod <- git_mod[git_mod$status == "modified", ]
@@ -18,7 +18,7 @@ create_shiny_data <- function() {
     return(invisible())
   }
   # country reference data -----------------------------------------------------
-
+  
   country_name <-
     countrycode::codelist %>%
     as_tibble() %>%
@@ -30,12 +30,12 @@ create_shiny_data <- function() {
       TRUE ~ country
     )) %>%
     filter(!is.na(country))
-
+  
   # we could write it, or read it from here
   # readr::write_csv(country_name, "../FINDCov19TrackerData/raw/country_name.csv")
-
+  
   # read data ------------------------------------------------------------------
-
+  
   # regex matching table
   iso_country <-
     countrycode::codelist %>%
@@ -43,33 +43,33 @@ create_shiny_data <- function() {
     select(
       regex = country.name.en.regex, country = iso2c
     )
-
+  
   # cv_cases_raw <- readr::read_csv("processed/coronavirus_cases.csv",
   #   col_types = readr::cols()
   # )
-
+  
   #cv_cases_raw <- readr::read_csv("https://raw.githubusercontent.com/dsbbfinddx/FINDCov19TrackerData/master/processed/coronavirus_cases.csv", col_types = readr::cols(), quoted_na = FALSE) # nolint
-
+  
   cv_cases_raw <- readr::read_csv("processed/coronavirus_cases.csv", col_types = readr::cols(), quoted_na = FALSE)
-
+  
   #cv_tests_raw <- readr::read_csv("https://raw.githubusercontent.com/dsbbfinddx/FINDCov19TrackerData/master/processed/coronavirus_tests.csv", col_types = readr::cols(), quoted_na = FALSE) # nolint
-
+  
   cv_tests_raw <- readr::read_csv("processed/coronavirus_tests.csv", col_types = readr::cols(), quoted_na = FALSE)
-
+  
   pop_raw <- readr::read_csv("https://raw.githubusercontent.com/dsbbfinddx/FINDCov19TrackerData/master/raw/UN_populations_2020.csv", col_types = readr::cols(), quoted_na = FALSE) # nolint
-
+  
   country_info <-
     readr::read_csv("https://raw.githubusercontent.com/dsbbfinddx/FINDCov19TrackerData/master/raw/country_info.csv", col_types = readr::cols(), quoted_na = FALSE) %>% # nolint
     select(-name_not_used) %>%
     filter(!is.na(country_iso))
-
+  
   # use clean identifier (iso2c) -----------------------------------------------
-
+  
   cv_cases <-
     cv_cases_raw %>%
     rename(name = country) %>%
     fuzzyjoin::regex_left_join(iso_country, by = c("name" = "regex"),
-     ignore_case = TRUE) %>%
+                               ignore_case = TRUE) %>%
     mutate(country = case_when(
       name == "Kosovo" ~ "XK",
       name == "SouthAfrica" ~ "ZA",
@@ -91,18 +91,18 @@ create_shiny_data <- function() {
       c(cases, deaths, new_cases, new_deaths),
       function(e) if_else(e < 0, NA_real_, e)
     ))
-
+  
   um <- unique(filter(cv_cases, is.na(country))$name)
   if (length(um) > 0) {
     cli::cli_alert_warning("Unmatched countries in 'cv_cases': {um}")
   }
-
+  
   cv_tests <-
     cv_tests_raw %>%
     rename(name = country) %>%
     fuzzyjoin::regex_left_join(iso_country,
-      by = c("name" = "regex"),
-      ignore_case = TRUE
+                               by = c("name" = "regex"),
+                               ignore_case = TRUE
     ) %>%
     mutate(country = case_when(
       name == "Kosovo" ~ "XK",
@@ -117,17 +117,17 @@ create_shiny_data <- function() {
       c(new_tests_corrected, tests_cumulative_corrected),
       function(e) if_else(e <= 0, NA_real_, e)
     ))
-
+  
   um <- unique(filter(cv_tests, is.na(country))$name)
   if (length(um) > 0) {
     cli::cli_alert_warning("Unmatched countries in 'cv_tests': {um}")
   }
-
+  
   pop <-
     pop_raw %>%
     rename(name = country) %>%
     fuzzyjoin::regex_left_join(iso_country,
-      by = c("name" = "regex"), ignore_case = TRUE
+                               by = c("name" = "regex"), ignore_case = TRUE
     ) %>%
     mutate(country = case_when(
       name == "Kosovo" ~ "XK",
@@ -137,24 +137,24 @@ create_shiny_data <- function() {
     filter(!(name %in% c("Channel Islands"))) %>%
     select(-regex) %>%
     relocate(country)
-
+  
   um <- unique(filter(pop, is.na(country))$name)
   if (length(um) > 0) {
     cli::cli_alert_warning("Unmatched countries in 'pop': {um}")
   }
-
+  
   # check all jhu country names have corresponding country data
   "%ni%" <- Negate("%in%")
   countries_without_population <- unique(cv_cases[which(cv_cases$country %ni%
-    unique(pop$country)), "country"]$country)
-
+                                                          unique(pop$country)), "country"]$country)
+  
   if (length(countries_without_population) > 0) {
     cli::cli_alert_info("{.fun process_jhu_data}: Population data lacking for
       the following countries: {countries_without_population}.", wrap = TRUE)
   }
-
+  
   # combining data -------------------------------------------------------------
-
+  
   data_combined <-
     select(cv_cases, -name) %>%
     full_join(select(cv_tests, -name), by = c("country", "date")) %>%
@@ -173,15 +173,15 @@ create_shiny_data <- function() {
       new_tests = new_tests_corrected,
       pop_100k
     )
-
+  
   um <- unique(filter(cv_tests, is.na(country))$name)
   if (length(um) > 0) {
     cli::cli_alert_danger("Some missing countries in 'data_combined'")
   }
-
-
+  
+  
   # calculations ---------------------------------------------------------------
-
+  
   data_country <-
     data_combined %>%
     # prefix cummulative vars
@@ -191,8 +191,8 @@ create_shiny_data <- function() {
     ) %>%
     # keep original data in separate columns
     mutate(across(c(new_cases, new_deaths),
-      function(e) e,
-      .names = "{col}_orig"
+                  function(e) e,
+                  .names = "{col}_orig"
     )) %>%
     # rolling averages of 7 for new vars
     arrange(country, time) %>%
@@ -219,9 +219,9 @@ create_shiny_data <- function() {
     mutate(pos = na_if(all_new_cases / all_new_tests, Inf)) %>%
     tibble::add_column(set = "country", .before = 1) %>%
     rename(unit = country)
-
+  
   # aggregate to regions, income groups
-
+  
   # if ratios are aggregated, only use observations that have data for
   # nominator and denominator
   sum_ratio <- function(nominator, denominator) {
@@ -229,15 +229,16 @@ create_shiny_data <- function() {
     in_use <- !is.na(nominator) & !is.na(denominator)
     sum(nominator[in_use]) / sum(denominator[in_use])
   }
-
+  
   data_region <-
     data_country %>%
     left_join(select(country_info,
-      unit = country_iso, region = continent,
-      income
+                     unit = country_iso, region = continent, who_region,
+                     income
     ), by = "unit") %>%
     group_by(unit = region, time) %>%
-    summarize(.groups="keep",
+    summarize(
+      .groups = "keep",
       across(
         c(cum_cases, new_cases, cum_deaths, new_deaths, cum_tests, new_tests),
         ~ sum_ratio(.x, pop_100k),
@@ -252,15 +253,40 @@ create_shiny_data <- function() {
     ) %>%
     ungroup() %>%
     tibble::add_column(set = "region", .before = 1)
-
+  
+  data_who_region <-
+    data_country %>%
+    left_join(select(country_info,
+                     unit = country_iso, region = continent, who_region,
+                     income
+    ), by = "unit") %>%
+    group_by(unit = who_region, time) %>%
+    summarize(
+      .groups = "keep",
+      across(
+        c(cum_cases, new_cases, cum_deaths, new_deaths, cum_tests, new_tests),
+        ~ sum_ratio(.x, pop_100k),
+        .names = "cap_{col}"
+      ),
+      across(
+        c(cum_cases, new_cases, cum_deaths, new_deaths, cum_tests, new_tests),
+        ~ sum_basic(.x),
+        .names = "all_{col}"
+      ),
+      pos = sum_ratio(all_new_cases, all_new_tests)
+    ) %>%
+    ungroup() %>%
+    tibble::add_column(set = "who_region", .before = 1)
+  
   data_income <-
     data_country %>%
     left_join(select(country_info,
-      unit = country_iso, region = continent,
-      income
+                     unit = country_iso, region = continent, who_region,
+                     income
     ), by = "unit") %>%
     group_by(unit = income, time) %>%
-    summarize(.groups="keep",
+    summarize(
+      .groups = "keep",
       across(
         c(cum_cases, new_cases, cum_deaths, new_deaths, cum_tests, new_tests),
         ~ sum_ratio(.x, pop_100k),
@@ -275,9 +301,9 @@ create_shiny_data <- function() {
     ) %>%
     ungroup() %>%
     tibble::add_column(set = "income", .before = 1)
-
+  
   data_all <-
-    bind_rows(data_country, data_region, data_income) %>%
+    bind_rows(data_country, data_region, data_who_region, data_income) %>%
     filter(!is.na(unit)) %>%
     mutate(across(where(is.numeric), function(e) {
       e[is.na(e)] <- NA
@@ -290,10 +316,10 @@ create_shiny_data <- function() {
     arrange(time, set, unit) %>%
     left_join(country_name, by = c("unit" = "country")) %>%
     relocate(name, .before = unit)
-
-
+  
+  
   # summary table --------------------------------------------------------------
-
+  
   latest_test_date <-
     data_all %>%
     filter(set == "country") %>%
@@ -304,11 +330,11 @@ create_shiny_data <- function() {
     group_by(unit) %>%
     summarize(latest_test_date = time[1]) %>%
     ungroup()
-
-
+  
+  
   # date_in_table <- max(data_all$time) - 1
   date_in_table <- max(data_all$time)
-
+  
   unit_info <-
     data_all %>%
     filter(time == !!date_in_table) %>%
@@ -321,12 +347,12 @@ create_shiny_data <- function() {
     ) %>%
     left_join(country_info, by = c("unit" = "country_iso")) %>%
     left_join(latest_test_date, by = "unit")
-
-
+  
+  
   # writing data ---------------------------------------------------------------
-
+  
   readr::write_csv(unit_info, "processed/unit_info.csv")
   readr::write_csv(data_all, "processed/data_all.csv")
-
+  
 }
 
